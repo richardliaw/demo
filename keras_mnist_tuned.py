@@ -6,6 +6,7 @@ Gets to 99.25% test accuracy after 12 epochs
 '''
 
 from __future__ import print_function
+import numpy as np
 import keras
 from keras.datasets import mnist
 from keras.models import Sequential
@@ -17,6 +18,8 @@ from keras_callback import TuneCallback  # Consider moving this into Tune???
 
 
 def train_mnist(args, cfg, reporter):
+#    K.set_session(K.tf.Session(config=K.tf.ConfigProto(
+#        intra_op_parallelism_threads=2, inter_op_parallelism_threads=1)))
     vars(args).update(cfg)
     batch_size = 128
     num_classes = 10
@@ -68,7 +71,7 @@ def train_mnist(args, cfg, reporter):
     model.fit(x_train, y_train,
               batch_size=batch_size,
               epochs=epochs,
-              verbose=1,
+              verbose=0,
               validation_data=(x_test, y_test),
               callbacks=[TuneCallback(reporter)])
 
@@ -96,22 +99,24 @@ if __name__ == '__main__':
                         help='Size of first kernel (default: 0.5)')
 
     args = parser.parse_args()
-    # import ipdb; ipdb.set_trace()
-    train_mnist(args)
-
-
-
-if __name__ == '__main__':
+    mnist.load_data()  # we do this because it's not threadsafe
+    
     import ray
     from ray import tune
+    from ray.tune.async_hyperband import AsyncHyperBandScheduler
 
-    ray.init()
-    tune.register_trainable("train_mnist", train_mnist)
+    ray.init(num_cpus=2)
+    sched = AsyncHyperBandScheduler(
+                time_attr="timesteps_total", reward_attr="mean_accuracy", max_t=300, grace_period=30)
+    tune.register_trainable("train_mnist", lambda cfg, rprtr: train_mnist(args, cfg, rprtr))
     tune.run_experiments({"exp": {
+        "stop": {"mean_accuracy": 0.99, "timesteps_total": 300},
         "run": "train_mnist",
+        "repeat": 100,
         "config": {
-            "ksize1": tune.grid_search([2, 3, 4]),
-            "ksize2": tune.grid_search([2, 3, 4]),
-            "poolsize": tune.grid_search([2, 3]),
+            "lr": lambda spec: np.random.uniform(0.001, 0.1),
+            "momentum": lambda spec: np.random.uniform(0.1, 0.9),
+            "hidden": lambda spec: np.random.randint(32, 512),
+            "dropout1": lambda spec: np.random.uniform(0.2, 0.8),
         }
-        }})
+        }}, verbose=0, scheduler=sched)
