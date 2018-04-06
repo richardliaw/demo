@@ -18,8 +18,8 @@ from keras_callback import TuneCallback  # Consider moving this into Tune???
 
 
 def train_mnist(args, cfg, reporter):
-#    K.set_session(K.tf.Session(config=K.tf.ConfigProto(
-#        intra_op_parallelism_threads=2, inter_op_parallelism_threads=1)))
+    K.set_session(K.tf.Session(config=K.tf.ConfigProto(
+        intra_op_parallelism_threads=args.threads, inter_op_parallelism_threads=args.threads)))
     vars(args).update(cfg)
     batch_size = 128
     num_classes = 10
@@ -79,6 +79,10 @@ def train_mnist(args, cfg, reporter):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Keras MNIST Example')
+    parser.add_argument('--jobs', type=int, default=1,
+                        help='number of jobs to run concurrently (default: 1)')
+    parser.add_argument('--threads', type=int, default=None,
+                        help='threads used in operations (default: all)')
     parser.add_argument('--steps', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
@@ -105,9 +109,9 @@ if __name__ == '__main__':
     from ray import tune
     from ray.tune.async_hyperband import AsyncHyperBandScheduler
 
-    ray.init(num_cpus=2)
+    ray.init(num_cpus=args.jobs)
     sched = AsyncHyperBandScheduler(
-                time_attr="timesteps_total", reward_attr="mean_accuracy", max_t=300, grace_period=30)
+                time_attr="timesteps_total", reward_attr="mean_accuracy", max_t=400, grace_period=20)
     tune.register_trainable("train_mnist", lambda cfg, rprtr: train_mnist(args, cfg, rprtr))
     tune.run_experiments({"exp": {
         "stop": {"mean_accuracy": 0.99, "timesteps_total": 300},
