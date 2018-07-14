@@ -14,12 +14,15 @@ from keras.layers import Dense, Dropout, Flatten
 from keras.layers import Conv2D, MaxPooling2D
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
-from keras_callback import TuneCallback  # Consider moving this into Tune???
+from keras_callback import TuneCallback
 
 
 def train_mnist(args, cfg, reporter):
-    K.set_session(K.tf.Session(config=K.tf.ConfigProto(
-        intra_op_parallelism_threads=args.threads, inter_op_parallelism_threads=args.threads)))
+    K.set_session(
+        K.tf.Session(
+            config=K.tf.ConfigProto(
+                intra_op_parallelism_threads=args.threads,
+                inter_op_parallelism_threads=args.threads)))
     vars(args).update(cfg)
     batch_size = 128
     num_classes = 10
@@ -53,8 +56,12 @@ def train_mnist(args, cfg, reporter):
     y_test = keras.utils.to_categorical(y_test, num_classes)
 
     model = Sequential()
-    model.add(Conv2D(32, kernel_size=(args.kernel1, args.kernel1),
-                     activation='relu', input_shape=(28, 28, 1)))
+    model.add(
+        Conv2D(
+            32,
+            kernel_size=(args.kernel1, args.kernel1),
+            activation='relu',
+            input_shape=(28, 28, 1)))
     model.add(Conv2D(64, (args.kernel2, args.kernel2), activation='relu'))
     model.add(MaxPooling2D(pool_size=(args.poolsize, args.poolsize)))
     model.add(Dropout(args.dropout1))
@@ -63,48 +70,83 @@ def train_mnist(args, cfg, reporter):
     model.add(Dropout(args.dropout2))
     model.add(Dense(num_classes, activation='softmax'))
 
-    model.compile(loss=keras.losses.categorical_crossentropy,
-                  optimizer=keras.optimizers.SGD(
-                      lr=args.lr, momentum=args.momentum),
-                  metrics=['accuracy'])
+    model.compile(
+        loss=keras.losses.categorical_crossentropy,
+        optimizer=keras.optimizers.SGD(lr=args.lr, momentum=args.momentum),
+        metrics=['accuracy'])
 
-    model.fit(x_train, y_train,
-              batch_size=batch_size,
-              epochs=epochs,
-              verbose=0,
-              validation_data=(x_test, y_test),
-              callbacks=[TuneCallback(reporter)])
+    model.fit(
+        x_train,
+        y_train,
+        batch_size=batch_size,
+        epochs=epochs,
+        verbose=0,
+        validation_data=(x_test, y_test),
+        callbacks=[TuneCallback(reporter)])
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Keras MNIST Example')
-    parser.add_argument('--jobs', type=int, default=1,
-                        help='number of jobs to run concurrently (default: 1)')
-    parser.add_argument('--threads', type=int, default=None,
-                        help='threads used in operations (default: all)')
-    parser.add_argument('--steps', type=float, default=0.01, metavar='LR',
-                        help='learning rate (default: 0.01)')
-    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
-                        help='learning rate (default: 0.01)')
-    parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
-                        help='SGD momentum (default: 0.5)')
-    parser.add_argument('--kernel1', type=int, default=3,
-                        help='Size of first kernel (default: 3)')
-    parser.add_argument('--kernel2', type=int, default=3,
-                        help='Size of second kernel (default: 3)')
-    parser.add_argument('--poolsize', type=int, default=2,
-                        help='Size of Pooling (default: 2)')
-    parser.add_argument('--dropout1', type=float, default=0.25,
-                        help='Size of first kernel (default: 0.25)')
-    parser.add_argument('--hidden', type=int, default=128,
-                        help='Size of Hidden Layer (default: 128)')
-    parser.add_argument('--dropout2', type=float, default=0.5,
-                        help='Size of first kernel (default: 0.5)')
+    parser.add_argument(
+        '--jobs',
+        type=int,
+        default=1,
+        help='number of jobs to run concurrently (default: 1)')
+    parser.add_argument(
+        '--threads',
+        type=int,
+        default=None,
+        help='threads used in operations (default: all)')
+    parser.add_argument(
+        '--steps',
+        type=float,
+        default=0.01,
+        metavar='LR',
+        help='learning rate (default: 0.01)')
+    parser.add_argument(
+        '--lr',
+        type=float,
+        default=0.01,
+        metavar='LR',
+        help='learning rate (default: 0.01)')
+    parser.add_argument(
+        '--momentum',
+        type=float,
+        default=0.5,
+        metavar='M',
+        help='SGD momentum (default: 0.5)')
+    parser.add_argument(
+        '--kernel1',
+        type=int,
+        default=3,
+        help='Size of first kernel (default: 3)')
+    parser.add_argument(
+        '--kernel2',
+        type=int,
+        default=3,
+        help='Size of second kernel (default: 3)')
+    parser.add_argument(
+        '--poolsize', type=int, default=2, help='Size of Pooling (default: 2)')
+    parser.add_argument(
+        '--dropout1',
+        type=float,
+        default=0.25,
+        help='Size of first kernel (default: 0.25)')
+    parser.add_argument(
+        '--hidden',
+        type=int,
+        default=128,
+        help='Size of Hidden Layer (default: 128)')
+    parser.add_argument(
+        '--dropout2',
+        type=float,
+        default=0.5,
+        help='Size of first kernel (default: 0.5)')
 
     args = parser.parse_args()
     mnist.load_data()  # we do this because it's not threadsafe
-    
+
     import ray
     from ray import tune
     from ray.tune.async_hyperband import AsyncHyperBandScheduler
@@ -112,16 +154,28 @@ if __name__ == '__main__':
     ray.init()
     #ray.init(redis_address="localhost:6379")
     sched = AsyncHyperBandScheduler(
-                time_attr="timesteps_total", reward_attr="mean_accuracy", max_t=400, grace_period=20)
-    tune.register_trainable("train_mnist", lambda cfg, rprtr: train_mnist(args, cfg, rprtr))
-    tune.run_experiments({"exp": {
-        "stop": {"mean_accuracy": 0.99, "timesteps_total": 300},
-        "run": "train_mnist",
-        "repeat": 100,
-        "config": {
-            "lr": lambda spec: np.random.uniform(0.001, 0.1),
-            "momentum": lambda spec: np.random.uniform(0.1, 0.9),
-            "hidden": lambda spec: np.random.randint(32, 512),
-            "dropout1": lambda spec: np.random.uniform(0.2, 0.8),
-        }
-        }}, verbose=0, scheduler=sched)
+        time_attr="timesteps_total",
+        reward_attr="mean_accuracy",
+        max_t=400,
+        grace_period=20)
+    tune.register_trainable("train_mnist",
+                            lambda cfg, rprtr: train_mnist(args, cfg, rprtr))
+    tune.run_experiments(
+        {
+            "exp": {
+                "stop": {
+                    "mean_accuracy": 0.99,
+                    "timesteps_total": 300
+                },
+                "run": "train_mnist",
+                "repeat": 100,
+                "config": {
+                    "lr": lambda spec: np.random.uniform(0.001, 0.1),
+                    "momentum": lambda spec: np.random.uniform(0.1, 0.9),
+                    "hidden": lambda spec: np.random.randint(32, 512),
+                    "dropout1": lambda spec: np.random.uniform(0.2, 0.8),
+                }
+            }
+        },
+        verbose=0,
+        scheduler=sched)
