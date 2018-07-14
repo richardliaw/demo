@@ -109,7 +109,8 @@ if __name__ == '__main__':
     from ray import tune
     from ray.tune.async_hyperband import AsyncHyperBandScheduler
 
-    ray.init(num_cpus=args.jobs)
+    ray.init()
+    #ray.init(redis_address="localhost:6379")
     sched = AsyncHyperBandScheduler(
                 time_attr="timesteps_total", reward_attr="mean_accuracy", max_t=400, grace_period=20)
     tune.register_trainable("train_mnist", lambda cfg, rprtr: train_mnist(args, cfg, rprtr))
